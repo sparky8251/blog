@@ -5,7 +5,22 @@
   <title>Buffer Underruns: The most common cause of audio crackle | Go Deeper, Not Wider</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="">
+  <script>
+    const stored = localStorage.getItem('theme')
+    const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches
+    const isDark = stored === 'dark' || (!stored && prefersDark)
+    if (isDark) document.documentElement.classList.add('dark')
+
+    function updateSyntax() {
+      const dark = document.documentElement.classList.contains('dark')
+      document.getElementById('syntax-light').disabled = dark
+      document.getElementById('syntax-dark').disabled = !dark
+    }
+    document.addEventListener('DOMContentLoaded', updateSyntax)
+  </script>
   <link rel="stylesheet" href="https://sparky8251.github.io/blog/style.css">
+  <link rel="stylesheet" href="https://sparky8251.github.io/blog/giallo-light.css" id="syntax-light">
+  <link rel="stylesheet" href="https://sparky8251.github.io/blog/giallo-dark.css" id="syntax-dark">
 </head>
 <body>
   <header>
@@ -18,6 +33,14 @@
           <li><a href="https:&#x2F;&#x2F;sparky8251.github.io&#x2F;blog&#x2F;understanding-linux&#x2F;">Understanding Linux</a></li>
         
       </ul>
+      <button class="theme-toggle" onclick="
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        updateSyntax()
+      " aria-label="Toggle theme">
+        <span class="light-icon">☀️</span>
+        <span class="dark-icon">🌙</span>
+      </button>
     </nav>
   </header>
 
@@ -109,20 +132,18 @@
 <p>Generally speaking, audio servers have a default buffer size and a minimum buffer size they will honor. Applications typically request a buffer from the system of a size the application developer specified but if they dont they get the default. Importantly, if an application requests something too small it'll usually just be given the minimum size buffer.</p>
 <p>This is not a Linux thing, this is an audio thing and it also happens on Windows and macOS (we will get to Windows later!).</p>
 <p>To see this on a modern Linux machine with PipeWire you can use <code>pw-top</code>. Here's the output from my system, cleaned up a bit.</p>
-<pre><code>QUANT   RATE   ERR  NAME
- 2048  48000    28  alsa_output (output device)
- 3600  48000     0  + Zen (Firefox fork, playing youtube video)
-</code></pre>
+<pre class="giallo z-code"><code data-lang="plain"><span class="giallo-l"><span>QUANT   RATE   ERR  NAME</span></span>
+<span class="giallo-l"><span> 2048  48000    28  alsa_output (output device)</span></span>
+<span class="giallo-l"><span> 3600  48000     0  + Zen (Firefox fork, playing youtube video)</span></span></code></pre>
 <p>Now, importantly, <code>latency = QUANT / RATE * 1000</code>. My output device has a 42.7ms buffer. Zen requested a 75ms buffer. There are 2 buffers and this has to do with how you can record a specific application not just the final output on Linux. Zen's bigger buffer means it's less susceptible to underruns than my general audio output.</p>
 <p>Now, if you are playing along at home you might have a really smart question right now: "Wait. If the output device has its own buffer, how do low latency applications like games work at all?"</p>
 <p>Good question! You are right, the output speaker is always 42.7ms behind, regardless of what an application might want given the above output!</p>
 <p>So, lets see what happens after I load up a game:</p>
-<pre><code>QUANT   RATE   ERR  NAME
-  128  48000    28  alsa_output (output device)
- 3600  48000     0  + Zen (Firefox fork, playing youtube video)
-  240  48000     0  + FactoryGameSteam (Satisfactory!)
-  240  48000     0  + FactoryGameSteam (Same, just requests 2 buffers. Unsure why but this is typical behavior)
-</code></pre>
+<pre class="giallo z-code"><code data-lang="plain"><span class="giallo-l"><span>QUANT   RATE   ERR  NAME</span></span>
+<span class="giallo-l"><span>  128  48000    28  alsa_output (output device)</span></span>
+<span class="giallo-l"><span> 3600  48000     0  + Zen (Firefox fork, playing youtube video)</span></span>
+<span class="giallo-l"><span>  240  48000     0  + FactoryGameSteam (Satisfactory!)</span></span>
+<span class="giallo-l"><span>  240  48000     0  + FactoryGameSteam (Same, just requests 2 buffers. Unsure why but this is typical behavior)</span></span></code></pre>
 <p>Satisfactory requested a 5ms buffer! And what's this? My speaker buffer dropped from 42.7ms to 2.7ms?</p>
 <p>Why did it shrink? Well, the output buffer is smaller to ensure it drains faster than apps can fill so it's always ready for the next chunk. PipeWire specifically just snaps to powers of 2, so you'll see 128, 256, 512, etc which is why 128, as 256 is the next step and thats bigger than Satisfactory's request.</p>
 <p>Note: Making them match can lead to more underruns by not allowing any time for draining before outputting, so the system tries to do this by default. This isn't a guarantee, but it is a risk.</p>

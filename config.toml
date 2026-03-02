@@ -9,6 +9,11 @@ build_search_index = false
 [markdown]
 insert_anchor_links = "right"
 
+[markdown.highlighting]
+style = "class"
+light_theme = "solarized-light"
+dark_theme = "solarized-dark"
+
 [slugify]
 paths = "on"
 anchors = "on"

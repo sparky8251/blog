@@ -1,24 +1,44 @@
 // Minimal blog styles - no frameworks, no bloat
+// Solarized color scheme
 
 :root {
-  --text: #222;
-  --bg: #fff;
-  --accent: #0066cc;
-  --muted: #666;
-  --border: #ddd;
-  --code-bg: #f5f5f5;
+  // Solarized Light
+  --bg: #fdf6e3;
+  --bg-highlight: #eee8d5;
+  --text: #657b83;
+  --text-emphasis: #586e75;
+  --muted: #93a1a1;
+  --accent: #268bd2;
+  --border: #eee8d5;
+  --code-bg: #eee8d5;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #e0e0e0;
-    --bg: #1a1a1a;
-    --accent: #6ab0f3;
-    --muted: #999;
-    --border: #333;
-    --code-bg: #2a2a2a;
-  }
+:root.dark {
+  // Solarized Dark
+  --bg: #002b36;
+  --bg-highlight: #073642;
+  --text: #839496;
+  --text-emphasis: #93a1a1;
+  --muted: #586e75;
+  --accent: #268bd2;
+  --border: #073642;
+  --code-bg: #073642;
 }
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  margin-left: auto;
+}
+
+.theme-toggle .dark-icon { display: none; }
+.theme-toggle .light-icon { display: inline; }
+:root.dark .theme-toggle .dark-icon { display: inline; }
+:root.dark .theme-toggle .light-icon { display: none; }
 
 * {
   box-sizing: border-box;

@@ -5,7 +5,22 @@
   <title>404 - Page Not Found</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Understanding computers the way they actually work">
+  <script>
+    const stored = localStorage.getItem('theme')
+    const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches
+    const isDark = stored === 'dark' || (!stored && prefersDark)
+    if (isDark) document.documentElement.classList.add('dark')
+
+    function updateSyntax() {
+      const dark = document.documentElement.classList.contains('dark')
+      document.getElementById('syntax-light').disabled = dark
+      document.getElementById('syntax-dark').disabled = !dark
+    }
+    document.addEventListener('DOMContentLoaded', updateSyntax)
+  </script>
   <link rel="stylesheet" href="https://sparky8251.github.io/blog/style.css">
+  <link rel="stylesheet" href="https://sparky8251.github.io/blog/giallo-light.css" id="syntax-light">
+  <link rel="stylesheet" href="https://sparky8251.github.io/blog/giallo-dark.css" id="syntax-dark">
 </head>
 <body>
   <header>
@@ -18,6 +33,14 @@
           <li><a href="https:&#x2F;&#x2F;sparky8251.github.io&#x2F;blog&#x2F;understanding-linux&#x2F;">Understanding Linux</a></li>
         
       </ul>
+      <button class="theme-toggle" onclick="
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        updateSyntax()
+      " aria-label="Toggle theme">
+        <span class="light-icon">☀️</span>
+        <span class="dark-icon">🌙</span>
+      </button>
     </nav>
   </header>
 
