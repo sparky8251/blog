@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-        <loc>http://localhost/</loc>
+        <loc>https://sparky8251.github.io/blog/</loc>
     </url>
     <url>
-        <loc>http://localhost/understanding-linux/</loc>
+        <loc>https://sparky8251.github.io/blog/understanding-linux/</loc>
     </url>
     <url>
-        <loc>http://localhost/understanding-linux/buffer-underruns/</loc>
+        <loc>https://sparky8251.github.io/blog/understanding-linux/buffer-underruns/</loc>
         <lastmod>2026-03-01</lastmod>
     </url>
 </urlset>
