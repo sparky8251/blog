@@ -85,8 +85,6 @@
                 
                   <li><a href="https:&#x2F;&#x2F;sparky8251.github.io&#x2F;blog&#x2F;understanding-linux&#x2F;buffer-underruns&#x2F;#what-are-buffer-underruns-and-why-do-they-cause-my-crackle-issue-1">What are buffer underruns and why do they cause my crackle issue?</a></li>
                 
-                  <li><a href="https:&#x2F;&#x2F;sparky8251.github.io&#x2F;blog&#x2F;understanding-linux&#x2F;buffer-underruns&#x2F;#other">Other</a></li>
-                
               </ul>
             
           </li>
@@ -103,10 +101,9 @@
 <p>This is used because you need to ensure the data is consumed quickly as its a near real time application, but also you want to absorb the storm of activity on your system so doing something like opening a web browser doesnt lead to your system being unable to submit new audio data to go to your speakers.</p>
 <h2 id="the-why">The why<a class="zola-anchor" href="#the-why" aria-label="Anchor link for: the-why">🔗</a></h2>
 <p>Due to this desire to have near realtime output but also mask system activity, buffers have a size vs latency tradeoff. If you have a 10ms long audio buffer, the sound emitting from your speakers was actually made around 10ms ago. The same if you set it to 100ms.</p>
-<p>Obviously, you want less latency <a rel="external" href="https://dl.acm.org/doi/fullHtml/10.1145/3678299.3678331">as even average human audio processing can notice something as small as 50ms delays</a>. You might not, but it's most likely not trying or training yourself not to than actual inability.</p>
-<p>So, we set our buffers small to make it quick to work with our surprisingly quick brains. Now, lets say you have a 2.7ms buffer for audio! This is common for low latency applications after all as theres other steps in the chain that will add latency, like transit over the network and decoding on the far side too.</p>
-<p>Now, as with all buffers any hiccup in filling the buffer due to system activity can now lead to whats called a "buffer underrun" where you havent actually managed to keep the buffer filling for an entire 2.7ms so now we are reading old data, sound played 2.7ms ago, and now you are reading what is effectively garbage. This produces crackle, static, etc when it happens.</p>
-<p>How it does so exactly is another matter (codecs, next bits relying on last bits to be decoded properly), but basically the continuous stream has been broken and you are now reading reading data that makes no sense and since checking this data for sanity would slow you down and introduce needless latency since the buffer is supposed to prevent this problem, we dont check it and we play it. So the garbage gets passed through and makes garbage audio from your speakers or as your microphone input.</p>
+<p>Obviously, you want less latency <a rel="external" href="https://dl.acm.org/doi/fullHtml/10.1145/3678299.3678331">as even average human audio processing can notice something as small as 50ms delays</a>. You might not notice it personally, but it's most likely not trying or training yourself not to than actual inability.</p>
+<p>So, we set our audio buffers small to make it quick to output to work with our surprisingly quick brains. Now, lets say you have a 2.7ms buffer for audio! This is common for low latency applications after all as theres other steps in the chain that will add latency, like transit over the network and decoding on the far side too.</p>
+<p>Now, as with all buffers any hiccup in filling the buffer due to system activity can lead to whats called a "buffer underrun" where you haven't actually managed to keep the buffer filling for an entire 2.7ms so now we are reading old data, sound data originally made 2.7ms+ ago, and now that you are reading what is effectively garbage due to how audio data is encoded (codecs, next bits rely on prior bits to make any real sense, so reading the old data wont make a repeat of sound). This then produces crackle, static, etc when it happens.</p>
 <h1 id="how-do-buffers-work-why-do-these-problems-happen">How do buffers work? Why do these problems happen?<a class="zola-anchor" href="#how-do-buffers-work-why-do-these-problems-happen" aria-label="Anchor link for: how-do-buffers-work-why-do-these-problems-happen">🔗</a></h1>
 <h2 id="audio-servers-applications-and-how-buffer-size-negotiations-work">Audio servers, applications, and how buffer size negotiations work<a class="zola-anchor" href="#audio-servers-applications-and-how-buffer-size-negotiations-work" aria-label="Anchor link for: audio-servers-applications-and-how-buffer-size-negotiations-work">🔗</a></h2>
 <p>Generally speaking, audio servers have a default buffer size and a minimum buffer size they will honor. Applications typically request a buffer from the system of a size the application developer specified but if they dont they get the default. Importantly, if an application requests something too small it'll usually just be given the minimum size buffer.</p>
@@ -127,8 +124,8 @@
   240  48000     0  + FactoryGameSteam (Same, just requests 2 buffers. Unsure why but this is typical behavior)
 </code></pre>
 <p>Satisfactory requested a 5ms buffer! And what's this? My speaker buffer dropped from 42.7ms to 2.7ms?</p>
-<p>Why did it shrink? Well, the output buffer is smaller to ensure it drains faster than apps can fill so it's always ready for the next chunk. PipeWire specifically just snaps to powers of 2, so you'll see 128, 256, 512, etc which is why 128, as 256 is the next step.</p>
-<p>Making them match can lead to more underruns by not allowing any time for draining before outputting, so the system tries to do this by default.</p>
+<p>Why did it shrink? Well, the output buffer is smaller to ensure it drains faster than apps can fill so it's always ready for the next chunk. PipeWire specifically just snaps to powers of 2, so you'll see 128, 256, 512, etc which is why 128, as 256 is the next step and thats bigger than Satisfactory's request.</p>
+<p>Note: Making them match can lead to more underruns by not allowing any time for draining before outputting, so the system tries to do this by default. This isn't a guarantee, but it is a risk.</p>
 <h2 id="applications-tight-specs-and-bad-developers">Applications, tight specs, and bad developers<a class="zola-anchor" href="#applications-tight-specs-and-bad-developers" aria-label="Anchor link for: applications-tight-specs-and-bad-developers">🔗</a></h2>
 <!--# Buffer Underruns: Wine, Proton, Discord, and Electron Apps
 
@@ -394,8 +391,10 @@ Start low, increase if you still get crackling. Higher values add latency, so fi
 <p><a rel="external" href="https://www.churchproduction.com/education/latency-and-its-affect-on-performers/">Latency and Its Effect on Performers</a> - Rather plain language explaining how audio latency impacts church performances and how it adds up over the full chain. Just to avoid another academic article as "proof"</p>
 </li>
 </ul>
-<h2 id="other">Other<a class="zola-anchor" href="#other" aria-label="Anchor link for: other">🔗</a></h2>
-<!--**Microsoft Documentation:**
+<!--
+## Other
+
+**Microsoft Documentation:**
 - [Low Latency Audio (Windows Driver Documentation)](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio) — Documents the pre-Windows 10 mandatory ~10ms buffer, the audio engine latency figures, and the Windows 10 changes to allow smaller buffers.
 
 **Community Evidence (Wine/Proton):**
