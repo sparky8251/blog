@@ -1,5 +1,5 @@
 # Site configuration
-base_url = "http://localhost"
+base_url = "https://sparky8251.github.io/blog"
 title = "Go Deeper, Not Wider"
 description = "Understanding computers the way they actually work"
 
