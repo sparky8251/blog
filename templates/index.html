@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>{{ section.title }}</h1>
+
+<p class="tagline">{{ config.description }}</p>
+
+<section class="series-list">
+  {% for subsection in section.subsections %}
+    {% set s = get_section(path=subsection) %}
+    <article class="series-card">
+      <h2><a href="{{ s.permalink }}">{{ s.title }}</a></h2>
+      <p>{{ s.description }}</p>
+      {% set published = s.pages | filter(attribute="draft", value=false) %}
+      {% if published | length > 0 %}
+        <p class="post-count">{{ published | length }} post{% if published | length != 1 %}s{% endif %}</p>
+      {% else %}
+        <p class="post-count">Coming soon</p>
+      {% endif %}
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

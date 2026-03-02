@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}{{ config.title }}{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{% block description %}{{ config.description }}{% endblock %}">
+  <link rel="stylesheet" href="{{ get_url(path='style.css') | safe }}">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="{{ get_url(path='/') }}" class="site-title">{{ config.title }}</a>
+      <ul>
+        {% set root = get_section(path="_index.md") %}
+        {% for section_path in root.subsections %}
+          {% set s = get_section(path=section_path) %}
+          <li><a href="{{ s.permalink }}">{{ s.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <p>Built with stubbornness and static HTML.</p>
+  </footer>
+</body>
+</html>

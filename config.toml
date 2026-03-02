@@ -1,0 +1,17 @@
+# Site configuration
+base_url = "http://localhost"
+title = "Go Deeper, Not Wider"
+description = "Understanding computers the way they actually work"
+
+compile_sass = true
+build_search_index = false
+
+[markdown]
+insert_anchor_links = "right"
+
+[slugify]
+paths = "on"
+anchors = "on"
+
+[extra]
+# Site-wide extras

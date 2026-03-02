@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section.title }} | {{ config.title }}{% endblock %}
+{% block description %}{{ section.description }}{% endblock %}
+
+{% block content %}
+<article class="series">
+  <header class="series-header">
+    <h1>{{ section.title }}</h1>
+    {% if section.description %}
+      <p class="series-description">{{ section.description }}</p>
+    {% endif %}
+  </header>
+
+  {% if section.toc %}
+  <nav class="page-toc">
+    <h2>Contents</h2>
+    <ul>
+    {% for h1 in section.toc %}
+      <li><a href="{{ h1.permalink }}">{{ h1.title }}</a>
+        {% if h1.children %}
+        <ul>
+          {% for h2 in h1.children %}
+          <li><a href="{{ h2.permalink }}">{{ h2.title }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  {{ section.content | safe }}
+
+  {# Subseries (if any) #}
+  {% if section.subsections | length > 0 %}
+    <nav class="subseries-list">
+      <h2>Topics</h2>
+      {% for subsection in section.subsections %}
+        {% set s = get_section(path=subsection) %}
+        <section class="subseries">
+          <h3><a href="{{ s.permalink }}">{{ s.title }}</a></h3>
+          {% if s.description %}<p>{{ s.description }}</p>{% endif %}
+          {% set published = s.pages | filter(attribute="draft", value=false) %}
+          {% if published | length > 0 %}
+            <ol class="toc">
+              {% for page in published %}
+                <li><a href="{{ page.permalink }}">{{ page.title }}</a></li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+        </section>
+      {% endfor %}
+    </nav>
+  {% endif %}
+
+</article>
+{% endblock %}

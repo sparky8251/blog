@@ -1,0 +1,357 @@
++++
+title = "Buffer Underruns: The most common cause of audio crackle"
+date = 2026-03-01
+weight = 1
++++
+
+# What are buffer underruns and why do they cause my crackle issue?
+
+## The what
+Buffers are a common construct in computers and used in many things, not just audio, and they exist to put a "buffer" between a producer of a data stream and a consumer of it. 
+
+For audio, an audio producer is like a game, a microphone inputting audio a voice client then consumes to send to your chat partner, etc.
+
+This is used because you need to ensure the data is consumed quickly as its a near real time application, but also you want to absorb the storm of activity on your system so doing something like opening a web browser doesnt lead to your system being unable to submit new audio data to go to your speakers.
+
+## The why
+Due to this desire to have near realtime output but also mask system activity, buffers have a size vs latency tradeoff. If you have a 10ms long audio buffer, the sound emitting from your speakers was actually made around 10ms ago. The same if you set it to 100ms.
+
+Obviously, you want less latency [as even average human audio processing can notice something as small as 50ms delays](https://dl.acm.org/doi/fullHtml/10.1145/3678299.3678331). You might not, but it's most likely not trying or training yourself not to than actual inability.
+
+So, we set our buffers small to make it quick to work with our surprisingly quick brains. Now, lets say you have a 2.7ms buffer for audio! This is common for low latency applications after all as theres other steps in the chain that will add latency, like transit over the network and decoding on the far side too. 
+
+Now, as with all buffers any hiccup in filling the buffer due to system activity can now lead to whats called a "buffer underrun" where you havent actually managed to keep the buffer filling for an entire 2.7ms so now we are reading old data, sound played 2.7ms ago, and now you are reading what is effectively garbage. This produces crackle, static, etc when it happens. 
+
+How it does so exactly is another matter (codecs, next bits relying on last bits to be decoded properly), but basically the continuous stream has been broken and you are now reading reading data that makes no sense and since checking this data for sanity would slow you down and introduce needless latency since the buffer is supposed to prevent this problem, we dont check it and we play it. So the garbage gets passed through and makes garbage audio from your speakers or as your microphone input.
+
+# How do buffers work? Why do these problems happen?
+
+## Audio servers, applications, and how buffer size negotiations work
+
+Generally speaking, audio servers have a default buffer size and a minimum buffer size they will honor. Applications typically request a buffer from the system of a size the application developer specified but if they dont they get the default. Importantly, if an application requests something too small it'll usually just be given the minimum size buffer.
+
+This is not a Linux thing, this is an audio thing and it also happens on Windows and macOS (we will get to Windows later!).
+
+To see this on a modern Linux machine with PipeWire you can use `pw-top`. Here's the output from my system, cleaned up a bit.
+
+```
+QUANT   RATE   ERR  NAME
+ 2048  48000    28  alsa_output (output device)
+ 3600  48000     0  + Zen (Firefox fork, playing youtube video)
+```
+
+Now, importantly, `latency = QUANT / RATE * 1000`. My output device has a 42.7ms buffer. Zen requested a 75ms buffer. There are 2 buffers and this has to do with how you can record a specific application not just the final output on Linux. Zen's bigger buffer means it's less susceptible to underruns than my general audio output.
+
+Now, if you are playing along at home you might have a really smart question right now: "Wait. If the output device has its own buffer, how do low latency applications like games work at all?"
+
+Good question! You are right, the output speaker is always 42.7ms behind, regardless of what an application might want given the above output!
+
+So, lets see what happens after I load up a game:
+
+```
+QUANT   RATE   ERR  NAME
+  128  48000    28  alsa_output (output device)
+ 3600  48000     0  + Zen (Firefox fork, playing youtube video)
+  240  48000     0  + FactoryGameSteam (Satisfactory!)
+  240  48000     0  + FactoryGameSteam (Same, just requests 2 buffers. Unsure why but this is typical behavior)
+```
+Satisfactory requested a 5ms buffer! And what's this? My speaker buffer dropped from 42.7ms to 2.7ms? 
+
+Why did it shrink? Well, the output buffer is smaller to ensure it drains faster than apps can fill so it's always ready for the next chunk. PipeWire specifically just snaps to powers of 2, so you'll see 128, 256, 512, etc which is why 128, as 256 is the next step. 
+
+Making them match can lead to more underruns by not allowing any time for draining before outputting, so the system tries to do this by default.
+
+## Applications, tight specs, and bad developers
+
+
+
+<!--# Buffer Underruns: Wine, Proton, Discord, and Electron Apps
+
+## The Problem
+
+You're playing a game through Proton or Wine. Audio crackles, pops, stutters. Maybe it starts fine and degrades over time. Maybe a lag spike causes permanent audio corruption until you restart. Native Linux applications — your browser, your music player, system sounds — work perfectly. The problem is exclusively in Wine/Proton.
+
+You google it. Every forum thread says the same thing:
+
+```bash
+PULSE_LATENCY_MSEC=60 %command%
+```
+
+Maybe it helps. Maybe it doesn't. Nobody explains why, and nobody mentions that 60ms of audio latency is *terrible* for gaming.
+
+---
+
+## The Explanation
+
+Windows games request audio buffers from the operating system. Many games request very small buffers — sometimes as low as 3ms — because on Windows, it doesn't matter what you ask for.
+
+Here's why: Microsoft's own documentation on the Windows audio engine states that prior to Windows 10, **the audio engine buffer was always ~10ms in shared mode**. Applications could request whatever they wanted. Windows gave them 10ms regardless. From Microsoft's [Low Latency Audio documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio):
+
+> *"Before Windows 10, the latency of the audio engine was equal to ~12ms for applications that use floating point data and ~6ms for applications that use integer data"*
+
+> *"Data transfers don't have to always use 10ms buffers, **as they did in previous Windows versions**"*
+
+That second quote is the key. Before Windows 10, the 10ms buffer was *mandatory*. The game asks for 3ms? It gets 10ms. The game asks for 1ms? It gets 10ms. The game never knows the difference because Windows silently substituted a sane value.
+
+Wine and Proton don't do that. They're compatibility layers designed to faithfully implement the Windows API. When a game says "give me a 3ms buffer," Wine actually tries to deliver a 3ms buffer through PulseAudio or PipeWire. And your audio hardware probably can't actually deliver clean audio at 3ms — so you get buffer underruns, which you hear as crackle and pops.
+
+This is Wine being *too accurate*, not Linux being broken.
+
+---
+
+## The Proof
+
+This isn't speculation. You can watch it happen in real time.
+
+**Step 1: See the underruns live**
+
+Open a terminal and run:
+
+```bash
+pw-top
+```
+
+This shows you every audio stream on your system, its buffer size, and — critically — the `ERR` column, which counts buffer underruns (xruns). Now launch a game through Proton. Watch the ERR column. If it's climbing, you're watching your crackle happen.
+
+Note the `QUANT` column — that's the buffer quantum (size) the stream is using. If it's very small (64, 128 samples), that's your game requesting a tiny buffer and PipeWire trying to honor it.
+
+**Step 2: Confirm it's the buffer**
+
+Set a higher latency for just that game:
+
+```bash
+PULSE_LATENCY_MSEC=40 %command%
+```
+
+Relaunch the game. Watch `pw-top` again. The ERR column should stay at zero or climb much more slowly. The crackle should be gone or dramatically reduced.
+
+You've just proven the cause: the game requested a buffer too small for your hardware to service reliably, and Wine faithfully passed that request through instead of silently overriding it like Windows does.
+
+**Step 3: Corroborating evidence**
+
+This pattern is confirmed across the ecosystem:
+
+- A [Fedora discussion on Wine/Proton audio stutter](https://discussion.fedoraproject.org/t/wine-proton-with-pipewire-sound-stutters-pipewire/126047) explicitly identifies the cause as "very low quantum value" — the application requesting tiny buffer sizes.
+- An [Ubuntu bug report on PipeWire + Wine](https://bugs.launchpad.net/bugs/2086206) documents the problem reproducing specifically with Wine/Proton and not with native applications on the same hardware.
+- A developer working on Wine compatibility for the game engine wrapper DxWnd [discovered](https://sourceforge.net/p/dxwnd/discussion/general/thread/c518bfd4cd/?page=1) that Windows "seems to swallow and process sound headers making less controls" — accepting technically incorrect audio parameters that Wine rejects because Wine does stricter validation. Making buffers larger fixed the crackling under Wine.
+- Hundreds of [Arch Linux](https://bbs.archlinux.org/viewtopic.php?id=276168), [Linux Mint](https://forums.linuxmint.com/viewtopic.php?t=451300), and [GitHub](https://github.com/ValveSoftware/Proton/issues/1147) threads all converge on the same pattern: native audio fine, Wine/Proton crackle, buffer increase fixes it.
+
+---
+
+## The Same Problem in Discord, Zoom, and Electron Apps
+
+This isn't just a Wine/Proton issue. Native Linux applications can trigger the same buffer underrun pattern — Discord is the most common offender.
+
+Discord uses WebRTC for voice chat, and WebRTC has aggressive timing requirements. From its [audio architecture](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/):
+
+> *"GetAudio returns exactly 10ms of audio samples. It MUST be called by the playout thread exactly 100 times per second."*
+
+That's a 10ms callback interval — tighter than most games request. PulseAudio's own documentation notes it "usually doesn't handle very low latencies well" and recommends at least 20ms buffers.
+
+Discord also uses Opus, which only operates at 48kHz. If your system runs at 44.1kHz or 192kHz, resampling happens on every audio callback. Resampling under tight timing constraints compounds the underrun risk.
+
+Users on [Arch Linux Forums](https://bbs.archlinux.org/viewtopic.php?id=307744) have observed this directly in `pw-top`:
+
+> *"In pw-top, ALSA audio_output.pci shows ERR while crackling is present. Other applications such as VLC or game audio do not display such errors."*
+
+The [Arch Wiki Discord page](https://wiki.archlinux.org/title/Discord) explicitly acknowledges the pattern:
+
+> *"If you experience crackling sounds when in voice chat, try the steps outlined in PulseAudio/Troubleshooting#Troubleshooting buffer underruns"*
+
+And there's a Chromium bug ([#169075](https://issues.chromium.org/40959351)) titled "Total audio corruption with WebRTC and PulseAudio" documenting this at the browser engine level.
+
+---
+
+## The Fix (And Why the Common Advice is Harmful)
+
+**Do not blindly set `PULSE_LATENCY_MSEC=60`.**
+
+60 milliseconds of audio latency is *huge*. That's perceptible delay between a visual event and its sound. In a game where audio cues matter — footsteps, gunshots, impact feedback — you're adding almost a tenth of a second of desync. You've traded one problem (crackle) for another (lag).
+
+The correct approach is to find the *minimum stable latency for your hardware*, not cargo-cult a value from a forum post.
+
+**Step 1: Find your hardware's reported period**
+
+```bash
+pw-top
+```
+
+Look at the `QUANT` and `RATE` columns for your output device (not the game stream — the actual sink). This tells you the quantum your hardware is running at. You can also check:
+
+```bash
+pactl list sinks | grep -A 5 "Latency"
+```
+
+This shows the configured and actual latency of your audio sink.
+
+**Step 2: Calculate your minimum**
+
+If your hardware quantum is 1024 samples at 48000 Hz:
+
+```
+1024 / 48000 * 1000 = ~21.3ms
+```
+
+That's your hardware's actual buffer period. You need your Wine latency to be at or slightly above this — not three times higher.
+
+**Step 3: Set it per-application, never system-wide**
+
+In Steam, set the launch option for the specific game:
+
+```
+PULSE_LATENCY_MSEC=25 %command%
+```
+
+Start with your calculated value, test with `pw-top` for underruns, and adjust up or down. Every game might need a slightly different value depending on how aggressively it requests small buffers.
+
+**Never set this system-wide.** It affects *all* PulseAudio/PipeWire clients. People have reported that setting it globally actually *causes* underruns in other applications that were working fine, because you've forced a latency that's wrong for their buffer expectations.
+
+If you're using PipeWire, you can also tune the quantum directly in your PipeWire config rather than using the PulseAudio environment variable:
+
+```bash
+# In ~/.config/pipewire/pipewire.conf.d/gaming.conf (or similar)
+context.properties = {
+    default.clock.min-quantum = 512
+}
+```
+
+Again — calculate the right value for your hardware, don't guess.
+
+**Step 4: Verify the fix**
+
+Launch the game with your tuned latency. Open `pw-top`. Confirm:
+1. The ERR column stays at zero (no underruns)
+2. The audio doesn't crackle
+3. Audio-visual sync feels correct (no perceptible delay on in-game sounds)
+
+If you're still getting underruns, bump the value up slightly. If the latency feels too high, try lowering it. You're finding *your* system's sweet spot, not applying someone else's.
+
+### For Discord specifically:
+
+```bash
+# Launch Discord with increased latency
+PULSE_LATENCY_MSEC=60 discord
+```
+
+Or try switching Discord's audio subsystem to "Legacy" in Voice & Video settings, which uses less aggressive buffering.
+
+If your system isn't running at 48kHz, consider matching it:
+
+```bash
+# In ~/.config/pipewire/pipewire.conf.d/discord.conf
+context.properties = {
+    default.clock.rate = 48000
+}
+```
+
+This eliminates resampling overhead during Discord's tight callback loop.
+
+---
+
+## PipeWire's Quantum Clamping — A Proper Fix
+
+If you're on PipeWire (most modern distros), you have a better option than environment variables: **quantum clamping**. This lets you set a floor on buffer sizes so apps can't request dangerously small values.
+
+The problem, explained by a user on [Linux Mint Forums](https://forums.linuxmint.com/viewtopic.php?t=449235):
+
+> *"The default time buffers for pipewire-pulse is 2.7 ms, which means that an application needs to be able to fill sound content every 2.7 ms, otherwise pipewire will send to the audio device whatever was previously filled and potentially some random data, hence the crackling."*
+
+2.7ms is aggressive. When a Discord notification fires while you're watching YouTube, a new audio stream starts. If the app can't fill that tiny buffer in time, you get garbage data — crackling.
+
+**The fix: raise the quantum floor.**
+
+For all PulseAudio-compatible apps:
+
+```ini
+# ~/.config/pipewire/pipewire-pulse.conf.d/min-quantum.conf
+pulse.properties = {
+    pulse.min.quantum = 512/48000
+}
+```
+
+Or globally for all PipeWire clients:
+
+```ini
+# ~/.config/pipewire/pipewire.conf.d/min-quantum.conf
+context.properties = {
+    default.clock.min-quantum = 1024
+}
+```
+
+For Discord specifically (without affecting other apps):
+
+```ini
+# ~/.config/pipewire/pipewire-pulse.conf.d/discord.conf
+pulse.rules = [
+    {
+        matches = [ { application.process.binary = "Discord" } ]
+        actions = {
+            update-props = {
+                pulse.min.quantum = 1024/48000
+            }
+        }
+    }
+]
+```
+
+Then restart PipeWire:
+
+```bash
+systemctl --user restart pipewire pipewire-pulse
+```
+
+**This works.** From [EasyEffects Issue #1567](https://github.com/wwmm/easyeffects/issues/1567), where users debugged Discord notification crackling:
+
+> *"After using it for some time, it would seem that indeed setting a fixed quantum rate reduces a lot the number of times I get a crackle."*
+
+The maintainer's blunt assessment of Discord:
+
+> *"Discord's app is an endless source of problems"*
+
+Common values that work:
+- `512/48000` (~10.7ms) — often sufficient
+- `1024/48000` (~21.3ms) — common sweet spot
+- `2048/48000` (~42.7ms) — for stubborn cases
+
+Start low, increase if you still get crackling. Higher values add latency, so find your minimum stable setting.-->
+
+---
+
+# Sources
+
+## What are buffer underruns and why do they cause my crackle issue?
+
+**Proof of tiny desync perceptions:**
+- [Perception of Synchrony between the Senses](https://www.ncbi.nlm.nih.gov/books/NBK92837/) - Documents that even untrained people often can notice a visual <-> audio mismatch of 25-50ms.
+
+- [Measuring the Just Noticeable Difference for Audio Latency](https://dl.acm.org/doi/fullHtml/10.1145/3678299.3678331) - A Gaming-focused study that found ~49ms "just noticable difference" meaning most cant tell the difference under 49ms, but musicians/gamers performed better on average.
+
+- [Latency and Its Effect on Performers](https://www.churchproduction.com/education/latency-and-its-affect-on-performers/) - Rather plain language explaining how audio latency impacts church performances and how it adds up over the full chain. Just to avoid another academic article as "proof"
+
+
+## Other
+
+<!--**Microsoft Documentation:**
+- [Low Latency Audio (Windows Driver Documentation)](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio) — Documents the pre-Windows 10 mandatory ~10ms buffer, the audio engine latency figures, and the Windows 10 changes to allow smaller buffers.
+
+**Community Evidence (Wine/Proton):**
+- [Fedora Discussion: Wine/Proton PipeWire Stutters](https://discussion.fedoraproject.org/t/wine-proton-with-pipewire-sound-stutters-pipewire/126047) — Identifies low quantum value as the cause.
+- [Ubuntu Bug #2086206: Wine/Proton Audio Stutter](https://bugs.launchpad.net/bugs/2086206) — Documents the problem as Wine/Proton-specific, not present with native apps.
+- [Valve/Proton Issue #1147](https://github.com/ValveSoftware/Proton/issues/1147) — Long-running community thread on Proton audio crackling.
+- [DxWnd Developer Discussion](https://sourceforge.net/p/dxwnd/discussion/general/thread/c518bfd4cd/?page=1) — Developer discovering Windows accepts incorrect audio parameters that Wine rejects.
+- [Arch Linux Forums: Wine Audio Stuttering (Solved)](https://bbs.archlinux.org/viewtopic.php?id=276168) — Demonstrates the PULSE_LATENCY_MSEC workaround and its limitations.
+
+**Community Evidence (Discord/WebRTC/Electron):**
+- [webrtcHacks: NetEQ Jitter Buffer](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/) — Documents WebRTC's aggressive 10ms callback requirement.
+- [Chromium Issue #169075](https://issues.chromium.org/40959351) — "Total audio corruption with WebRTC and PulseAudio" affecting Linux.
+- [Arch Wiki: Discord](https://wiki.archlinux.org/title/Discord) — Acknowledges crackling in voice chat and links to buffer underrun troubleshooting.
+- [Arch Linux Forums: Audio Popping/Crackling](https://bbs.archlinux.org/viewtopic.php?id=307744) — Users observe `pw-top` showing ERR for Discord while other apps are clean.
+- [Discord Support: Sample Rate Limitations](https://support.discord.com/hc/en-us/community/posts/360042925852-Support-for-higher-audio-sample-rates) — Confirms Opus codec requires 48kHz.
+- [Mozilla Bug #1430827](https://bugzilla.mozilla.org/show_bug.cgi?id=1430827) — WebRTC + PulseAudio latency analysis.
+
+**Community Evidence (PipeWire Quantum Clamping):**
+- [Linux Mint Forums: PipeWire Crackling with Multiple Sources](https://forums.linuxmint.com/viewtopic.php?t=449235) — Explains the 2.7ms default buffer problem.
+- [EasyEffects Issue #1567: Sporadic Audio Crackling](https://github.com/wwmm/easyeffects/issues/1567) — Discord notification crackling debugged; maintainer notes Discord is "an endless source of problems."
+- [EndeavourOS Forums: PipeWire Crackling/Popping Fix](https://forum.endeavouros.com/t/pipewire-tweak-crackling-popping-fix/32860) — Users report various quantum values fixing output crackling.
+- [PipeWire Docs: Protocol Pulse Module](https://docs.pipewire.org/page_module_protocol_pulse.html) — Official documentation on `pulse.min.quantum`.
+- [LinuxMusicians: PipeWire Dynamic Quantum](https://linuxmusicians.com/viewtopic.php?t=26617) — Explains quantum negotiation.-->

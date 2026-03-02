@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} | {{ config.title }}{% endblock %}
+{% block description %}{{ page.description | default(value=page.summary) }}{% endblock %}
+
+{% block content %}
+<article class="post">
+  {# Breadcrumb #}
+  <nav class="breadcrumb">
+    <a href="{{ get_url(path='/') }}">Home</a>
+    {% if page.ancestors %}
+      {% for ancestor in page.ancestors %}
+        {% set s = get_section(path=ancestor) %}
+        {% if not loop.first %}
+          <span class="sep">/</span>
+          <a href="{{ s.permalink }}">{{ s.title }}</a>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </nav>
+
+  <header>
+    <h1>{{ page.title }}</h1>
+    {% if page.description %}
+      <p class="post-description">{{ page.description }}</p>
+    {% endif %}
+  </header>
+
+  {# In-page TOC #}
+  {% if page.toc | length > 0 %}
+    <nav class="page-toc">
+      <h2>Contents</h2>
+      <ul>
+        {% for h1 in page.toc %}
+          <li>
+            <a href="{{ h1.permalink }}">{{ h1.title }}</a>
+            {% if h1.children | length > 0 %}
+              <ul>
+                {% for h2 in h1.children %}
+                  <li><a href="{{ h2.permalink }}">{{ h2.title }}</a></li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </nav>
+  {% endif %}
+
+  <div class="post-content">
+    {{ page.content | safe }}
+  </div>
+
+  {# Series navigation #}
+  {% if page.lower or page.higher %}
+    <nav class="series-nav">
+      {% if page.higher %}
+        <a href="{{ page.higher.permalink }}" class="prev">Previous: {{ page.higher.title }}</a>
+      {% endif %}
+      {% if page.lower %}
+        <a href="{{ page.lower.permalink }}" class="next">Next: {{ page.lower.title }}</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+</article>
+{% endblock %}
